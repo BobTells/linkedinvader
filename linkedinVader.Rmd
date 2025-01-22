@@ -1,0 +1,83 @@
+---
+title: "LinkedIn Post Sentiment Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Required libraries
+library(tidyverse)
+library(vader)
+```
+
+```{r read-data}
+# Read the LinkedIn posts file
+linkedin_data <- read_lines("linkedin_posts.txt")
+```
+
+```{r parse-data}
+# Parse data into posts and responses
+posts <- linkedin_data[str_detect(linkedin_data, "^p,")]
+responses <- linkedin_data[str_detect(linkedin_data, "^r,")]
+
+# Clean data (remove prefix)
+posts <- str_replace(posts, "^p,\\s*", "")
+responses <- str_replace(responses, "^r,\\s*", "")
+```
+
+```{r sentiment-analysis}
+# Perform VADER sentiment analysis
+post_sentiments <- vader_df(posts)
+response_sentiments <- vader_df(responses)
+```
+
+```{r sentiment-categorization}
+# Categorize sentiments based on compound score
+categorize_sentiment <- function(compound_score) {
+  case_when(
+    compound_score > 0.5 ~ "Very Positive",
+    compound_score > 0.1 ~ "Positive",
+    compound_score >= -0.1 ~ "Neutral",
+    compound_score >= -0.5 ~ "Negative",
+    TRUE ~ "Very Negative"
+  )
+}
+
+# Apply categorization
+post_sentiments$sentiment_category <- sapply(post_sentiments$compound, categorize_sentiment)
+response_sentiments$sentiment_category <- sapply(response_sentiments$compound, categorize_sentiment)
+```
+
+```{r summary-statistics}
+# Overall sentiment distribution
+post_sentiment_summary <- post_sentiments %>%
+  group_by(sentiment_category) %>%
+  summarise(count = n())
+
+response_sentiment_summary <- response_sentiments %>%
+  group_by(sentiment_category) %>%
+  summarise(count = n())
+
+combined_sentiment_summary <- bind_rows(
+  mutate(post_sentiment_summary, type = "Posts"),
+  mutate(response_sentiment_summary, type = "Responses")
+)
+
+print("Post Sentiment Counts:")
+print(post_sentiment_summary)
+print("\nResponse Sentiment Counts:")
+print(response_sentiment_summary)
+print("\nCombined Sentiment Counts:")
+print(combined_sentiment_summary)
+```
+
+```{r visualization}
+# Visualize sentiment distribution
+library(ggplot2)
+
+ggplot(combined_sentiment_summary, aes(x = sentiment_category, y = count, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Sentiment Counts of LinkedIn Posts and Responses",
+       x = "Sentiment Category",
+       y = "Count") +
+  theme_minimal()
+```
